@@ -1,0 +1,10 @@
+# files i want to ignore when commiting due to their size
+
+ctr_15.csv
+ctr_16.csv
+ctr_17.csv
+ctr_18.csv
+ctr_19.csv
+ctr_20.csv
+ctr_21.csv
+ctr_test.csv
