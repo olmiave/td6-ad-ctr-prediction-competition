@@ -3,6 +3,7 @@ import time
 import pandas as pd
 import xgboost as xgb
 
+from tqdm import tqdm
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.compose import ColumnTransformer
@@ -41,7 +42,7 @@ train_data['auction_hour'] = pd.to_datetime(train_data['auction_time'], unit='s'
 train_data['auction_day'] = pd.to_datetime(train_data['auction_time'], unit='s').dt.dayofweek
 
 # Train a tree on the train data (sampling training data)
-train_data = train_data.sample(frac=1/10)
+train_data = train_data.sample(frac=5/10)
 y_train = train_data["Label"]
 X_train = train_data.drop(columns=["Label"])
 
