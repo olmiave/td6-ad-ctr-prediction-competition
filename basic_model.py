@@ -9,7 +9,9 @@ from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.compose import ColumnTransformer
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score
+from sklearn.metrics import roc_auc_score, roc_curve
+import matplotlib.pyplot as plt
 
 # start timer 
 start_time = time.time()
@@ -42,7 +44,7 @@ train_data['auction_hour'] = pd.to_datetime(train_data['auction_time'], unit='s'
 train_data['auction_day'] = pd.to_datetime(train_data['auction_time'], unit='s').dt.dayofweek
 
 # Train a tree on the train data (sampling training data)
-train_data = train_data.sample(frac=5/10)
+train_data = train_data.sample(frac=1/10)
 y_train = train_data["Label"]
 X_train = train_data.drop(columns=["Label"])
 
@@ -60,26 +62,62 @@ preprocessor = ColumnTransformer(
     ]
 )
 
+# Define the XGBoost classifier with hyperparameter grid
+xgb_model = xgb.XGBClassifier(random_state=2345, use_label_encoder=False, eval_metric='logloss')
 
-# Define the pipeline with the preprocessor and XGBoost model
+param_grid = {
+    'classifier__n_estimators': [50, 100, 200],
+    'classifier__max_depth': [4, 6, 8],
+    'classifier__learning_rate': [0.01, 0.1, 0.3]
+}
+
+# Define the pipeline with preprocessing and the XGBoost classifier
 pipeline = Pipeline(steps=[
     ('preprocessor', preprocessor),
-    ('classifier', xgb.XGBClassifier(n_estimators=100, max_depth=6, learning_rate=0.1, random_state=2345))
+    ('classifier', xgb_model)
 ])
 
 # Train/test split for validation
 X_train_split, X_valid_split, y_train_split, y_valid_split = train_test_split(X_train, y_train, test_size=0.2, random_state=2345)
 
-# Fit the model
-pipeline.fit(X_train_split, y_train_split)
+# Use GridSearchCV for hyperparameter tuning
+grid_search = GridSearchCV(pipeline, param_grid, cv=3, scoring='roc_auc', n_jobs=-1, verbose=2)
+
+# Fit the model with the best hyperparameters
+grid_search.fit(X_train_split, y_train_split)
+
+# Get the best estimator and use it for predictions
+best_model = grid_search.best_estimator_
+print("Best Model: ", best_model)
+
+# # Fit the model
+# pipeline.fit(X_train_split, y_train_split)
+# # Evaluate on the validation set
+# y_valid_preds = pipeline.predict_proba(X_valid_split)[:, 1]
 
 # Evaluate on the validation set
-y_valid_preds = pipeline.predict_proba(X_valid_split)[:, 1]
+y_valid_preds = best_model.predict_proba(X_valid_split)[:, 1]
+
+# Compute AUC score on validation data
+auc = roc_auc_score(y_valid_split, y_valid_preds)
+print(f"Validation AUC Score: {auc:.4f}")
+
+# Optional: Plot ROC Curve
+fpr, tpr, thresholds = roc_curve(y_valid_split, y_valid_preds)
+plt.figure()
+plt.plot(fpr, tpr, label=f'AUC = {auc:.2f}')
+plt.plot([0, 1], [0, 1], color='navy', linestyle='--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic')
+plt.legend(loc="lower right")
+plt.show()
 
 # Predict on the evaluation set (test data)
 eval_data['auction_hour'] = pd.to_datetime(eval_data['auction_time'], unit='s').dt.hour
 eval_data['auction_day'] = pd.to_datetime(eval_data['auction_time'], unit='s').dt.dayofweek
-y_preds = pipeline.predict_proba(eval_data.drop(columns=["id"]))[:, 1]
+# y_preds = pipeline.predict_proba(eval_data.drop(columns=["id"]))[:, 1]
+y_preds = best_model.predict_proba(eval_data.drop(columns=["id"]))[:, 1]
 
 
 # X_train = X_train.select_dtypes(include='number')
