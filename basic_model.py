@@ -70,7 +70,7 @@ test_data = test_data.drop(columns=['auction_time'])
 #####################  
 
 # Train a tree on the train data (sampling training data)
-train_data = train_data.sample(frac=1/10)
+train_data = train_data.sample(frac=8/10)
 y_train = train_data["Label"]
 X_train = train_data.drop(columns=["Label"])
 
