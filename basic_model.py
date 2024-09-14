@@ -53,7 +53,7 @@ for df in [train_data, test_data]:
     df['auction_year'] = df['auction_time'].dt.year             # Year of the auction
     df['is_weekend'] = df['auction_day_of_week'].apply(lambda x: 1 if x >= 5 else 0) #binary features for weekends
 
-##################### GOOD HOURS
+##################### good_hours
 
 # Step 1: Identify the most popular hours (good hours)
 auction_hour_counts = train_data['auction_hour'].value_counts().sort_values(ascending=False)
@@ -69,7 +69,14 @@ for df in [train_data, test_data]:
 train_data = train_data.drop(columns=['auction_time'])
 test_data = test_data.drop(columns=['auction_time'])
 
-#####################  
+
+##################### Reducing size 
+# Group rare categories
+threshold = 100  # You can adjust this threshold
+value_counts = train_data['device_id_type'].value_counts()
+rare_categories = value_counts[value_counts < threshold].index
+train_data['device_id_type'] = train_data['device_id_type'].replace(rare_categories, 'Other')
+
 
 
 ######################################################
@@ -81,8 +88,15 @@ test_data = test_data.drop(columns=['auction_time'])
 y_train = train_data["Label"]
 X_train = train_data.drop(columns=["Label"])
 
+
+## Calculate Scale Pos Weight
+positive_class_count = y_train.value_counts().get(1, 0)
+negative_class_count = y_train.value_counts().get(0, 0)
+scale_pos_weight = negative_class_count / positive_class_count if positive_class_count > 0 else 1
+
+
 # Train/test split for validation
-X_train_split, X_valid_split, y_train_split, y_valid_split = train_test_split(X_train, y_train, test_size=0.2, random_state=2345)
+X_train_split, X_valid_split, y_train_split, y_valid_split = train_test_split(X_train, y_train, test_size=0.3, random_state=2345)
 
 # Separate the categorical and numerical columns
 categorical_cols = [col for col in X_train.columns if X_train[col].dtype == 'object']
@@ -99,7 +113,13 @@ preprocessor = ColumnTransformer(
 # Define the pipeline with the preprocessor and XGBoost model
 pipeline = Pipeline(steps=[
     ('preprocessor', preprocessor),
-    ('classifier', xgb.XGBClassifier(n_estimators=100, max_depth=6, learning_rate=0.1, random_state=2345))
+    ('classifier', xgb.XGBClassifier(
+        n_estimators=100,
+        max_depth=6,
+        learning_rate=0.1,
+        scale_pos_weight=scale_pos_weight,
+        random_state=2345
+    ))
 ])
 
 
