@@ -68,9 +68,11 @@ for df in [train_data, test_data]:
     df['good_hours'] = df['auction_hour'].apply(lambda x: 1 if x in good_hours else 0)
     
 
-# Now, dropping the original 'auction_time' since it's not needed anymore for the model
-train_data = train_data.drop(columns=['auction_time'])
-test_data = test_data.drop(columns=['auction_time'])
+##################### bidfloor_age_interaction
+
+# Interaction term: auction_bidfloor * auction_age
+train_data['bidfloor_age_interaction'] = train_data['auction_bidfloor'] * train_data['auction_age']
+test_data['bidfloor_age_interaction'] = test_data['auction_bidfloor'] * test_data['auction_age']
 
 
 ##################### Reducing size 
@@ -79,6 +81,11 @@ threshold = 100  # You can adjust this threshold
 value_counts = train_data['device_id_type'].value_counts()
 rare_categories = value_counts[value_counts < threshold].index
 train_data['device_id_type'] = train_data['device_id_type'].replace(rare_categories, 'Other')
+
+
+# Now, dropping the original 'auction_time' since it's not needed anymore for the model
+train_data = train_data.drop(columns=['auction_time'])
+test_data = test_data.drop(columns=['auction_time'])
 
 # Run garbage collection
 gc.collect()
