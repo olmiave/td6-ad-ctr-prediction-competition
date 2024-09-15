@@ -27,6 +27,9 @@ file_names = ["ctr_15.csv", "ctr_16.csv", "ctr_17.csv", "ctr_18.csv", "ctr_19.cs
 # Read and concatenate all the CSV files
 train_data = pd.concat([pd.read_csv(file) for file in file_names])
 
+# Sample data
+train_data = train_data.sample(frac=0.8, random_state=2345)
+
 # Load the test data
 test_data = pd.read_csv("ctr_test.csv")
 
@@ -77,7 +80,8 @@ value_counts = train_data['device_id_type'].value_counts()
 rare_categories = value_counts[value_counts < threshold].index
 train_data['device_id_type'] = train_data['device_id_type'].replace(rare_categories, 'Other')
 
-
+# Run garbage collection
+gc.collect()
 
 ######################################################
 ## Model
