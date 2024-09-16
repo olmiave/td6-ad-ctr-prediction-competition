@@ -92,8 +92,8 @@ rare_categories = value_counts[value_counts < threshold].index
 train_data['device_id_type'] = train_data['device_id_type'].replace(rare_categories, 'Other')
 
 # Now, dropping the original 'auction_time' since it's not needed anymore for the model
-train_data = train_data.drop(['auction_time', 'device_id'], axis=1)
-test_data = test_data.drop(['auction_time', 'device_id'], axis=1)
+train_data = train_data.drop(['auction_time'], axis=1)
+test_data = test_data.drop(['auction_time'], axis=1)
 
 # Run garbage collection
 gc.collect()
