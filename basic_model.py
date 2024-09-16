@@ -55,6 +55,11 @@ for df in [train_data, test_data]:
     df['auction_month'] = df['auction_time'].dt.month           # Month of the year
     df['auction_year'] = df['auction_time'].dt.year             # Year of the auction
     df['is_weekend'] = df['auction_day_of_week'].apply(lambda x: 1 if x >= 5 else 0) #binary features for weekends
+    
+    df['auction_hour_bin'] = pd.cut(df['auction_hour'], bins=[0, 6, 12, 18, 24], labels=[1, 2, 3, 4]) #'night', 'morning', 'afternoon', 'evening'
+    # Convert to categorical type
+    df['auction_hour_bin'] = df['auction_hour_bin'].astype('category')
+
 
 ##################### good_hours
 
@@ -67,13 +72,17 @@ good_hours = auction_hour_counts.index[:top_25_percent].tolist()
 for df in [train_data, test_data]:
     df['good_hours'] = df['auction_hour'].apply(lambda x: 1 if x in good_hours else 0)
     
+##################### action_categorical_*: 
 
-##################### bidfloor_age_interaction
+# Combine different levels of business unit IDs
+train_data['action_cat_0_1'] = train_data['action_categorical_0'].astype(str) + "_" + train_data['action_categorical_1'].astype(str)
+test_data['action_cat_0_1'] = test_data['action_categorical_0'].astype(str) + "_" + test_data['action_categorical_1'].astype(str)
 
-# Interaction term: auction_bidfloor * auction_age
-train_data['bidfloor_age_interaction'] = train_data['auction_bidfloor'] * train_data['auction_age']
-test_data['bidfloor_age_interaction'] = test_data['auction_bidfloor'] * test_data['auction_age']
+##################### BINNING AND INTERACTIONS
 
+# Binning auction_bidfloor into categories (to capture non linear effects)
+train_data['bidfloor_binned'] = pd.cut(train_data['auction_bidfloor'], bins=[0, 1, 5, 10, 50], labels=[1, 2, 3, 4]) #'low', 'medium', 'high', 'very_high'
+test_data['bidfloor_binned'] = pd.cut(test_data['auction_bidfloor'], bins=[0, 1, 5, 10, 50], labels=[1, 2, 3, 4]) #'low', 'medium', 'high', 'very_high'
 
 ##################### Reducing size 
 # Group rare categories
@@ -82,10 +91,9 @@ value_counts = train_data['device_id_type'].value_counts()
 rare_categories = value_counts[value_counts < threshold].index
 train_data['device_id_type'] = train_data['device_id_type'].replace(rare_categories, 'Other')
 
-
 # Now, dropping the original 'auction_time' since it's not needed anymore for the model
-train_data = train_data.drop(columns=['auction_time'])
-test_data = test_data.drop(columns=['auction_time'])
+train_data = train_data.drop(['auction_time', 'device_id'], axis=1)
+test_data = test_data.drop(['auction_time', 'device_id'], axis=1)
 
 # Run garbage collection
 gc.collect()
@@ -99,12 +107,10 @@ gc.collect()
 y_train = train_data["Label"]
 X_train = train_data.drop(columns=["Label"])
 
-
 ## Calculate Scale Pos Weight
 positive_class_count = y_train.value_counts().get(1, 0)
 negative_class_count = y_train.value_counts().get(0, 0)
 scale_pos_weight = negative_class_count / positive_class_count if positive_class_count > 0 else 1
-
 
 # Train/test split for validation
 X_train_split, X_valid_split, y_train_split, y_valid_split = train_test_split(X_train, y_train, test_size=0.3, random_state=2345)
@@ -112,12 +118,14 @@ X_train_split, X_valid_split, y_train_split, y_valid_split = train_test_split(X_
 # Separate the categorical and numerical columns
 categorical_cols = [col for col in X_train.columns if X_train[col].dtype == 'object']
 numerical_cols = [col for col in X_train.columns if X_train[col].dtype != 'object']
+# passthrough_columns = ['device_id']  # Columns that should not be encoded
 
 # Define a column transformer to handle categorical and numerical data
 preprocessor = ColumnTransformer(
     transformers=[
         ('num', make_pipeline(SimpleImputer(strategy='median'), StandardScaler()), numerical_cols),  # Impute and scale numerical data
-        ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols)  # One-hot encode categorical data
+        ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols),  # One-hot encode categorical data, sparse=False,
+#         ('pass_through', 'passthrough', passthrough_columns) 
     ]
 )
 
@@ -133,12 +141,15 @@ pipeline = Pipeline(steps=[
     ))
 ])
 
-
 # Fit the model
 pipeline.fit(X_train_split, y_train_split)
 
 # # Evaluate on the validation set
 y_valid_preds = pipeline.predict_proba(X_valid_split)[:, 1]
+
+######################################################
+## AUC-ROC
+######################################################
 
 # Compute AUC score on validation data
 auc = roc_auc_score(y_valid_split, y_valid_preds)
@@ -156,21 +167,13 @@ plt.legend(loc="lower right")
 plt.show()
 
 
-
-# Predict on the evaluation set (test data)
-# test_data['auction_hour'] = pd.to_datetime(test_data['auction_time'], unit='s').dt.hour
-# test_data['auction_day'] = pd.to_datetime(test_data['auction_time'], unit='s').dt.dayofweek
-
-
 # Predict on the evaluation set (test data)
 y_preds = pipeline.predict_proba(test_data.drop(columns=["id"]))[:, 1]
-
 
 # Make the submission file
 submission_df = pd.DataFrame({"id": test_data["id"], "Label": y_preds})
 submission_df["id"] = submission_df["id"].astype(int)
 submission_df.to_csv("basic_model.csv", sep=",", index=False)
-
 
 # End timer
 # Calculate the elapsed time in hours, minutes, and seconds
