@@ -33,14 +33,9 @@ train_data = train_data.sample(frac=0.8, random_state=2345)
 # Load the test data
 test_data = pd.read_csv("ctr_test.csv")
 
-# Feature Engineering: Creating new features from auction_time
-# train_data['auction_hour'] = pd.to_datetime(train_data['auction_time'], unit='s').dt.hour
-# train_data['auction_day'] = pd.to_datetime(train_data['auction_time'], unit='s').dt.dayofweek
-
 ##########################################################################################################################
 ##  FEATURE ENGINEERING
 ##########################################################################################################################
-
 
 # Convert auction_time (Unix time) to datetime
 train_data['auction_time'] = pd.to_datetime(train_data['auction_time'], unit='s')
@@ -52,14 +47,13 @@ for df in [train_data, test_data]:
     df['auction_minute'] = df['auction_time'].dt.minute         # Minute of the auction
     df['auction_day_of_week'] = df['auction_time'].dt.dayofweek # Day of the week (Monday=0, Sunday=6)
     df['auction_day'] = df['auction_time'].dt.day               # Day of the month
-    df['auction_month'] = df['auction_time'].dt.month           # Month of the year
-    df['auction_year'] = df['auction_time'].dt.year             # Year of the auction
+#     df['auction_month'] = df['auction_time'].dt.month           # Month of the year
+#     df['auction_year'] = df['auction_time'].dt.year             # Year of the auction
     df['is_weekend'] = df['auction_day_of_week'].apply(lambda x: 1 if x >= 5 else 0) #binary features for weekends
     
     df['auction_hour_bin'] = pd.cut(df['auction_hour'], bins=[0, 6, 12, 18, 24], labels=[1, 2, 3, 4]) #'night', 'morning', 'afternoon', 'evening'
     # Convert to categorical type
     df['auction_hour_bin'] = df['auction_hour_bin'].astype('category')
-
 
 ##################### good_hours
 
@@ -71,18 +65,35 @@ good_hours = auction_hour_counts.index[:top_25_percent].tolist()
 # Step 3: Create the 'good_hours' feature
 for df in [train_data, test_data]:
     df['good_hours'] = df['auction_hour'].apply(lambda x: 1 if x in good_hours else 0)
-    
+
 ##################### action_categorical_*: 
 
 # Combine different levels of business unit IDs
-train_data['action_cat_0_1'] = train_data['action_categorical_0'].astype(str) + "_" + train_data['action_categorical_1'].astype(str)
-test_data['action_cat_0_1'] = test_data['action_categorical_0'].astype(str) + "_" + test_data['action_categorical_1'].astype(str)
-
+for df in [train_data, test_data]:
+    df['action_cat_0_1'] = df['action_categorical_0'].astype(str) + '_' + df['action_categorical_1'].astype(str)
+    df['action_cat_1_3'] = df['action_categorical_1'].astype(str) + '_' + df['action_categorical_3'].astype(str)
+    df['action_cat_3_5'] = df['action_categorical_3'].astype(str) + '_' + df['action_categorical_5'].astype(str)
+    df['action_cat_5_6'] = df['action_categorical_5'].astype(str) + '_' + df['action_categorical_6'].astype(str)
+   
 ##################### BINNING AND INTERACTIONS
 
 # Binning auction_bidfloor into categories (to capture non linear effects)
-train_data['bidfloor_binned'] = pd.cut(train_data['auction_bidfloor'], bins=[0, 1, 5, 10, 50], labels=[1, 2, 3, 4]) #'low', 'medium', 'high', 'very_high'
-test_data['bidfloor_binned'] = pd.cut(test_data['auction_bidfloor'], bins=[0, 1, 5, 10, 50], labels=[1, 2, 3, 4]) #'low', 'medium', 'high', 'very_high'
+train_data['bidfloor_binned'] = pd.cut(train_data['auction_bidfloor'], bins=[0, 1, 5, 10, 30], labels=[1, 2, 3, 4]) #'low', 'medium', 'high', 'very_high'
+test_data['bidfloor_binned'] = pd.cut(test_data['auction_bidfloor'], bins=[0, 1, 5, 10, 30], labels=[1, 2, 3, 4]) #'low', 'medium', 'high', 'very_high'
+
+##################### time since last auction interaction
+for df in [train_data, test_data]:
+#     df['auction_time'] = pd.to_datetime(df['auction_time'])
+    df['previous_auction_time'] = df.groupby('device_id')['auction_time'].shift(1)
+    
+    df['auction_time_unix'] = df['auction_time'].astype('int64') // 10**9
+    df['previous_auction_time'] = df['previous_auction_time'].astype('int64') // 10**9
+    
+    df['time_since_last_auction_seconds'] = df['auction_time_unix'] - df['previous_auction_time']
+
+
+for df in [train_data, test_data]:
+    df['rolling_bidfloor'] = df.groupby('device_id')['auction_bidfloor'].transform(lambda x: x.rolling(window=5).mean())
 
 ##################### Reducing size 
 # Group rare categories
@@ -92,8 +103,8 @@ rare_categories = value_counts[value_counts < threshold].index
 train_data['device_id_type'] = train_data['device_id_type'].replace(rare_categories, 'Other')
 
 # Now, dropping the original 'auction_time' since it's not needed anymore for the model
-train_data = train_data.drop(['auction_time'], axis=1)
-test_data = test_data.drop(['auction_time'], axis=1)
+train_data = train_data.drop(['auction_time'], axis = 1)
+test_data = test_data.drop(['auction_time'], axis = 1)
 
 # Run garbage collection
 gc.collect()
@@ -166,6 +177,9 @@ plt.title('Receiver Operating Characteristic')
 plt.legend(loc="lower right")
 plt.show()
 
+######################################################
+## file
+######################################################
 
 # Predict on the evaluation set (test data)
 y_preds = pipeline.predict_proba(test_data.drop(columns=["id"]))[:, 1]
@@ -174,6 +188,13 @@ y_preds = pipeline.predict_proba(test_data.drop(columns=["id"]))[:, 1]
 submission_df = pd.DataFrame({"id": test_data["id"], "Label": y_preds})
 submission_df["id"] = submission_df["id"].astype(int)
 submission_df.to_csv("basic_model.csv", sep=",", index=False)
+
+# Run garbage collection
+gc.collect()
+
+######################################################
+## timer end
+######################################################
 
 # End timer
 # Calculate the elapsed time in hours, minutes, and seconds
@@ -184,3 +205,4 @@ seconds = int(elapsed_time % 60)
 
 # Print the elapsed time
 print("Process finished --- %d hours %d minutes %d seconds --- " % (hours, minutes, seconds))
+
