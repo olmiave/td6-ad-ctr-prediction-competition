@@ -1,4 +1,4 @@
-# 0.8735 / 47 minutes 29 seconds / 0.84055
+# 0.8742 / 5 horas 24 minutes / 0.84160
 import gc
 import ast
 import time
@@ -61,8 +61,8 @@ for df in tqdm([train_data, test_data], desc="Creating Auction Time Features"):
     df['auction_minute'] = df['auction_time'].dt.minute         # Minute of the auction
     df['auction_day_of_week'] = df['auction_time'].dt.dayofweek # Day of the week (Monday=0, Sunday=6)
     df['auction_day'] = df['auction_time'].dt.day               # Day of the month
-#     df['auction_month'] = df['auction_time'].dt.month           # Month of the year
-#     df['auction_year'] = df['auction_time'].dt.year             # Year of the auction
+    df['auction_month'] = df['auction_time'].dt.month           # Month of the year
+    df['auction_year'] = df['auction_time'].dt.year             # Year of the auction
     df['is_weekend'] = df['auction_day_of_week'].apply(lambda x: 1 if x >= 5 else 0) #binary features for weekends
     
     df['auction_hour_bin'] = pd.cut(df['auction_hour'], bins=[0, 6, 12, 18, 24], labels=[1, 2, 3, 4]) #'night', 'morning', 'afternoon', 'evening'
@@ -99,7 +99,7 @@ for df in tqdm([train_data, test_data], desc="Calculating Time Since Last Auctio
 
 
 for df in tqdm([train_data, test_data], desc="Calculating Rolling Bidfloor"):
-    df['rolling_bidfloor'] = df.groupby('device_id')['auction_bidfloor'].transform(lambda x: x.rolling(window=5).mean())
+    df['rolling_bidfloor'] = df.groupby('device_id')['auction_bidfloor'].transform(lambda x: x.rolling(window=7).mean())
 
 ##################### Reducing size 
 # Group rare categories
@@ -194,7 +194,7 @@ preprocessor = ColumnTransformer(
 
 
 hyperparameters = {'boosting_type': 'gbdt', 'colsample_bytree': 0.7298850189031411, 'learning_rate': 0.011223985889567765,
-          'min_child_samples': 75, 'n_estimators': 1700, 'num_leaves': 77, 'reg_alpha': 2.0453339399606656, 'reg_lambda': 1.1015957272258972,
+          'min_child_samples': 77, 'n_estimators': 2000, 'num_leaves': 79, 'reg_alpha': 2.0453339399606656, 'reg_lambda': 1.1015957272258972,
           'subsample': 0.6839425708957405, 'scale_pos_weight': scale_pos_weight}
 
 
@@ -290,19 +290,22 @@ gc.collect()
 # submission_df["id"] = submission_df["id"].astype(int)
 # submission_df.to_csv("lgbm_model.csv", sep=",", index=False)
 
-print(f"Preparing submission file:")
-# Step 2.1: Prepare Test Features
+print(f"Retraining model on the full dataset")
+# Fit the model on the full dataset
+pipeline.fit(X_train, y_train)
+# Step 2: Generate Predictions for the Test set
+print(f"Preparing final submission file")
 # Drop the 'id' column as it's not a feature
 X_test = test_data.drop(columns=["id"])
-# Step 2.2: Generate Predictions with 
+# Generate predictions for the test set
 y_preds_final = pipeline.predict_proba(X_test)[:, 1]
 
 # Step 2.5: Create the Submission DataFrame
 submission_df = pd.DataFrame({"id": test_data["id"],"Label": y_preds_final})
 submission_df["id"] = submission_df["id"].astype(int)
 # Step 2.6: Save the Submission File
-submission_df.to_csv("basic_model_lgbm.csv", sep=",", index=False)
-print("Submission file 'basic_model_lgbm.csv' created successfully.")
+submission_df.to_csv("basic_model_lgbm2_full.csv", sep=",", index=False)
+print("Submission file 'basic_model_lgbm2_full.csv' created successfully.")
 
 
 ######################################################
