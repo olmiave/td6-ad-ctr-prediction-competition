@@ -173,7 +173,7 @@ print(f"Preprocessing pipeline for CatBoost:")
 # Preprocessing pipeline for CatBoost
 preprocessor_cb = ColumnTransformer(
     transformers=[
-        ('num', Pipeline([('imputer', SimpleImputer(strategy='median')), ('scaler', StandardScaler())]), numerical_cols),
+        # ('num', Pipeline([('imputer', SimpleImputer(strategy='median')), ('scaler', StandardScaler())]), numerical_cols),
         ('cat', 'passthrough', categorical_cols)  # Ensure categorical columns are included
     ]
 )

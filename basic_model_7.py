@@ -1,4 +1,4 @@
-# 0.8742 / 5 horas 24 minutes / 0.84160
+#  0.8761 / 4 horas 32 minutes / 0.84126
 import gc
 import ast
 import time
@@ -123,13 +123,14 @@ print("Data types for Test columns:", test_data.dtypes)
 ######################################################
 # Columns Drop
 ######################################################
-# Drop columns with more than 80% NAN
-threshold = 0.8  # 80% threshold
-missing_ratio = train_data.isnull().mean()
-cols_to_drop_missing = missing_ratio[missing_ratio > threshold].index
-print(f"Dropped columns missings: {cols_to_drop_missing}")
-train_data.drop(cols_to_drop_missing, axis=1, inplace=True)
-test_data.drop(cols_to_drop_missing, axis=1, inplace=True)
+# # Drop columns with more than 80% NAN
+# threshold = 0.8  # 80% threshold
+# missing_ratio = train_data.isnull().mean()
+# cols_to_drop_missing = missing_ratio[missing_ratio > threshold].index
+# print(f"Dropped columns missings: {cols_to_drop_missing}")
+# train_data.drop(cols_to_drop_missing, axis=1, inplace=True)
+# test_data.drop(cols_to_drop_missing, axis=1, inplace=True)
+
 
 # # Dropping columns with high cardinality 
 # # Function to determine if a column is unhashable
@@ -194,7 +195,7 @@ preprocessor = ColumnTransformer(
 
 
 hyperparameters = {'boosting_type': 'gbdt', 'colsample_bytree': 0.7298850189031411, 'learning_rate': 0.011223985889567765,
-          'min_child_samples': 77, 'n_estimators': 2000, 'num_leaves': 79, 'reg_alpha': 2.0453339399606656, 'reg_lambda': 1.1015957272258972,
+          'min_child_samples': 77, 'n_estimators': 5000, 'num_leaves': 79, 'reg_alpha': 2.0453339399606656, 'reg_lambda': 1.1015957272258972,
           'subsample': 0.6839425708957405, 'scale_pos_weight': scale_pos_weight}
 
 
@@ -304,8 +305,8 @@ y_preds_final = pipeline.predict_proba(X_test)[:, 1]
 submission_df = pd.DataFrame({"id": test_data["id"],"Label": y_preds_final})
 submission_df["id"] = submission_df["id"].astype(int)
 # Step 2.6: Save the Submission File
-submission_df.to_csv("basic_model_lgbm2_full.csv", sep=",", index=False)
-print("Submission file 'basic_model_lgbm2_full.csv' created successfully.")
+submission_df.to_csv("basic_model_lgbm2_full_nodrop.csv", sep=",", index=False)
+print("Submission file 'basic_model_lgbm2_full_nodrop.csv' created successfully.")
 
 
 ######################################################
