@@ -1,0 +1,29 @@
+---
+title: "TP2: Click-through Rate Prediction for Ads"
+author: "Micaela Oliva y Camila Bernardez"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Análisis exploratorio de datos
+
+
+
+## Variables adicionales
+
+
+
+
+## Conjunto de Validación
+
+
+
+## Modelado e Hiperparametros
+
+
+
+## Atributos Importantes

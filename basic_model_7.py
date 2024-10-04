@@ -123,13 +123,13 @@ print("Data types for Test columns:", test_data.dtypes)
 ######################################################
 # Columns Drop
 ######################################################
-# # Drop columns with more than 80% NAN
-# threshold = 0.8  # 80% threshold
-# missing_ratio = train_data.isnull().mean()
-# cols_to_drop_missing = missing_ratio[missing_ratio > threshold].index
-# print(f"Dropped columns missings: {cols_to_drop_missing}")
-# train_data.drop(cols_to_drop_missing, axis=1, inplace=True)
-# test_data.drop(cols_to_drop_missing, axis=1, inplace=True)
+# Drop columns with more than 80% NAN
+threshold = 0.8  # 80% threshold
+missing_ratio = train_data.isnull().mean()
+cols_to_drop_missing = missing_ratio[missing_ratio > threshold].index
+print(f"Dropped columns missings: {cols_to_drop_missing}")
+train_data.drop(cols_to_drop_missing, axis=1, inplace=True)
+test_data.drop(cols_to_drop_missing, axis=1, inplace=True)
 
 
 # # Dropping columns with high cardinality 
@@ -194,13 +194,20 @@ preprocessor = ColumnTransformer(
 
 
 
-hyperparameters = {'boosting_type': 'gbdt', 'colsample_bytree': 0.7298850189031411, 'learning_rate': 0.011223985889567765,
-          'min_child_samples': 77, 'n_estimators': 5000, 'num_leaves': 79, 'reg_alpha': 2.0453339399606656, 'reg_lambda': 1.1015957272258972,
+hyperparameters_lgbm = {'boosting_type': 'gbdt', 'colsample_bytree': 0.7298850189031411, 'learning_rate': 0.011223985889567765,
+          'min_child_samples': 77, 'n_estimators': 2500, 'num_leaves': 79, 'reg_alpha': 2.0453339399606656, 'reg_lambda': 1.1015957272258972,
           'subsample': 0.6839425708957405, 'scale_pos_weight': scale_pos_weight}
 
+hyperparameters_xgboost = {'colsample_bytree': 0.6509900925068455, 'gamma': 1.1805850841291976, 'learning_rate': 0.009732823220209536,
+          'max_depth': 8, 'min_child_weight': 63.01501268012936, 'n_estimators': 2500, 'reg_lambda': 1.2219990638829437,
+          'subsample': 0.9692112596805615, 'scale_pos_weight': scale_pos_weight}
 
-model = lgb.LGBMClassifier(objective='binary', seed=random_state, **hyperparameters, device='cpu')
 
+model1 = lgb.LGBMClassifier(objective='binary', seed=random_state, **hyperparameters_lgbm, device='cpu')
+
+model2 = xgb.XGBClassifier(objective='binary:logistic', seed=random_state, eval_metric='auc', **hyperparameters_xgboost, tree_method='hist')
+
+models = [model1, model2]
 
 gc.collect()
 
@@ -249,26 +256,48 @@ gc.collect()
 #     # Calculate the final ROC AUC score using the average predictions
 #     final_roc_auc = sklearn.metrics.roc_auc_score(y_train_split, final_ypred)
 #     print(f"Final ROC AUC Score (Average of Predictions) for KFOLD CV: {final_roc_auc}")
+# Loop through the models, build pipelines, fit, and evaluate
 
-print(f"Training model")
+for i, model in enumerate(models):
+    print(f"Training model {i+1}")
     
-# Define the pipeline for this model
-pipeline = Pipeline(steps=[
-    ('preprocessor', preprocessor),
+    # Define the pipeline for this model
+    pipeline = Pipeline(steps=[
+        ('preprocessor', preprocessor),
         ('classifier', model)
-])
+    ])
     
-# Fit the model
-pipeline.fit(X_train_split, y_train_split)
+    # Fit the model
+    pipeline.fit(X_train_split, y_train_split)
     
-# Predict on the validation set
-y_valid_preds = pipeline.predict_proba(X_valid_split)[:, 1]
+    # Predict on the validation set
+    y_valid_preds = pipeline.predict_proba(X_valid_split)[:, 1]
+    
+    # Evaluate model performance (e.g., AUC score)
+    auc_score = roc_auc_score(y_valid_split, y_valid_preds)
+    print(f"Model {i+1} AUC: {auc_score:.4f}")
 
-# Evaluate model performance (e.g., AUC score)
-auc_score = roc_auc_score(y_valid_split, y_valid_preds)
-print(f"Model AUC: {auc_score:.4f}")
+    gc.collect()
 
-gc.collect()
+# print(f"Training model")
+    
+# # Define the pipeline for this model
+# pipeline = Pipeline(steps=[
+#     ('preprocessor', preprocessor),
+#         ('classifier', model)
+# ])
+    
+# # Fit the model
+# pipeline.fit(X_train_split, y_train_split)
+    
+# # Predict on the validation set
+# y_valid_preds = pipeline.predict_proba(X_valid_split)[:, 1]
+
+# # Evaluate model performance (e.g., AUC score)
+# auc_score = roc_auc_score(y_valid_split, y_valid_preds)
+# print(f"Model AUC: {auc_score:.4f}")
+
+# gc.collect()
 
 ######################################################
 ## file
@@ -291,22 +320,46 @@ gc.collect()
 # submission_df["id"] = submission_df["id"].astype(int)
 # submission_df.to_csv("lgbm_model.csv", sep=",", index=False)
 
-print(f"Retraining model on the full dataset")
-# Fit the model on the full dataset
-pipeline.fit(X_train, y_train)
-# Step 2: Generate Predictions for the Test set
-print(f"Preparing final submission file")
-# Drop the 'id' column as it's not a feature
-X_test = test_data.drop(columns=["id"])
-# Generate predictions for the test set
-y_preds_final = pipeline.predict_proba(X_test)[:, 1]
+submission_preds = []
+for i, model in enumerate(models):
+    print(f"Generating predictions for model {i+1}")
+    # Define the pipeline for prediction
+    pipeline = Pipeline(steps=[
+        ('preprocessor', preprocessor),
+        ('classifier', model)
+    ])
+    # Fit the pipeline on the entire training data
+    pipeline.fit(X_train, y_train)  # Ensure that you use the full training data for final predictions
+    # Predict on the test data
+    y_preds = pipeline.predict_proba(test_data.drop(columns=["id"]))[:, 1]
+    # Add predictions to the list
+    submission_preds.append(y_preds)
 
-# Step 2.5: Create the Submission DataFrame
-submission_df = pd.DataFrame({"id": test_data["id"],"Label": y_preds_final})
+# If you want an ensemble prediction, average them (optional)
+final_preds = sum(submission_preds) / len(submission_preds)
+
+# Make the submission file
+submission_df = pd.DataFrame({"id": test_data["id"], "Label": final_preds})
 submission_df["id"] = submission_df["id"].astype(int)
-# Step 2.6: Save the Submission File
-submission_df.to_csv("basic_model_lgbm2_full_nodrop.csv", sep=",", index=False)
-print("Submission file 'basic_model_lgbm2_full_nodrop.csv' created successfully.")
+submission_df.to_csv("ensemble_model_lgbm2_xgboost.csv", sep=",", index=False)
+
+
+# print(f"Retraining model on the full dataset")
+# # Fit the model on the full dataset
+# pipeline.fit(X_train, y_train)
+# # Step 2: Generate Predictions for the Test set
+# print(f"Preparing final submission file")
+# # Drop the 'id' column as it's not a feature
+# X_test = test_data.drop(columns=["id"])
+# # Generate predictions for the test set
+# y_preds_final = pipeline.predict_proba(X_test)[:, 1]
+
+# # Step 2.5: Create the Submission DataFrame
+# submission_df = pd.DataFrame({"id": test_data["id"],"Label": y_preds_final})
+# submission_df["id"] = submission_df["id"].astype(int)
+# # Step 2.6: Save the Submission File
+# submission_df.to_csv("basic_model_lgbm2_full_nodrop.csv", sep=",", index=False)
+# print("Submission file 'basic_model_lgbm2_full_nodrop.csv' created successfully.")
 
 
 ######################################################
